@@ -1,0 +1,1823 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Admin;
+use App\Models\Contractor;
+
+use Illuminate\Support\Str;
+use Illuminate\Http\Request;
+use App\Models\Consumer_detail;
+use App\Models\Warehouse_meter;
+use App\Models\Inward_released_em_meter;
+use App\Models\Outward_released_em_meter;
+use Carbon\Carbon;
+use App\Models\Zone_code;
+use App\Models\Lot_detail;
+use App\Models\Contractor_inventory;
+
+use App\Models\Annexure_1;
+
+
+
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Redirect;
+// use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Support\Facades\Validator;
+
+use App\Models\Meter_main;
+use App\Models\Error_record;
+use Illuminate\Support\Facades\DB;
+use App\Models\Successful_record;
+
+
+class ProjectHeadController extends Controller
+{
+    public function index()
+    {
+        $hescom_manager = Admin::where('type', 'hescom_manager')->where('created_by', session('rexkod_vishvin_auth_userid'))->get();
+        $hescom_manager_count = count($hescom_manager);
+
+        $inventory_manager = Admin::where('type', 'inventory_manager')->where('created_by', session('rexkod_vishvin_auth_userid'))->get();
+        $inventory_manager_count = count($inventory_manager);
+        $qc_manager = Admin::where('type', 'qc_manager')->where('created_by', session('rexkod_vishvin_auth_userid'))->get();
+        $qc_manager_count = count($qc_manager);
+        $contractor_manager = Admin::where('type', 'contractor_manager')->where('created_by', session('rexkod_vishvin_auth_userid'))->get();
+        $contractor_manager_count = count($contractor_manager);
+
+         // Count of meters project_head wise
+         $es_total_meter_count_project_head_wise = 0;
+         $es_total_unused_meter_count_project_head_wise = 0;
+         $es_total_used_meter_count_project_head_wise = 0;
+         $em_total_inward_meter_count_project_head_wise = 0;
+         $em_total_outward_meter_count_project_head_wise = 0;
+         $total_rejected_meter_count_project_head_wise = 0;
+
+         $get_all_inventory_managers =  Admin::where('type', 'inventory_manager')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get();
+         foreach ($get_all_inventory_managers as $inventory_manager) {
+             $get_all_inventory_executives =  Admin::where('type', 'inventory_executive')->where('created_by', $inventory_manager->id)->get();
+             foreach ($get_all_inventory_executives as $inventory_executive) {
+                 $es_meter_total_warehouse_stock = Warehouse_meter::where('created_by', $inventory_executive->id)->get();
+
+
+            foreach ($es_meter_total_warehouse_stock as $es_meter) {
+                // counting total meter count
+                $single_box = $es_meter->meter_serial_no;
+                if ($single_box !== null && $single_box !== '') {
+                    $break_single_meter = explode(',', $single_box);
+                    foreach ($break_single_meter as $es_meter_individual) {
+                        $es_total_meter_count_project_head_wise++;
+                    }
+                }
+                // counting unused meter count
+                $single_box = $es_meter->unused_meter_serial_no;
+                if ($single_box !== null && $single_box !== '') {
+                    $break_single_meter = explode(',', $single_box);
+                    foreach ($break_single_meter as $es_meter_individual) {
+                        $es_total_unused_meter_count_project_head_wise++;
+                    }
+                }
+                // counting used meter count
+                $single_box = $es_meter->used_meter_serial_no;
+                if ($single_box !== null && $single_box !== '') {
+                    $break_single_meter = explode(',', $single_box);
+                    foreach ($break_single_meter as $es_meter_individual) {
+                        $es_total_used_meter_count_project_head_wise++;
+                    }
+                }
+            }
+
+                 $em_meter_total_inward_stock = Inward_released_em_meter::where('created_by', $inventory_executive->id)->get();
+                 $em_total_inward_meter_count_project_head_wise = count($em_meter_total_inward_stock);
+                 $em_total_outward_meter_stock = Outward_released_em_meter::get();
+                 $em_total_outward_meter_count_project_head_wise = count($em_total_outward_meter_stock);
+
+                 $field_executives = Admin::where('type', 'field_executive')->where('created_by', $inventory_executive->id)->get();
+                 foreach ($field_executives as $field_executive) {
+                     $es_meter_total_rejected = Meter_main::where('qc_status', 2)->orWhere('so_status', 2)->orWhere('aee_status', 2)->orWhere('aao_status', 2)->where('created_by', $field_executive->id)->get();
+                     $total_rejected_meter_count_project_head_wise = count($es_meter_total_rejected);
+                 }
+             }
+         }
+
+         $pending_by_field_executive = Meter_main::whereNull('serial_no_old')
+                                                ->orWhereNull('serial_no_new')
+                                                ->get();
+         $count_pending_by_field_executive = count($pending_by_field_executive);
+
+         $data = [
+            'hescom_manager_count' => $hescom_manager_count,
+            'inventory_manager_count' => $inventory_manager_count,
+            'qc_manager_count' => $qc_manager_count,
+            'contractor_manager_count' => $contractor_manager_count,
+            'es_total_meter_count_project_head_wise' => $es_total_meter_count_project_head_wise,
+            'es_total_unused_meter_count_project_head_wise' => $es_total_unused_meter_count_project_head_wise,
+            'es_total_used_meter_count_project_head_wise' => $es_total_used_meter_count_project_head_wise,
+            'em_total_inward_meter_count_project_head_wise' => $em_total_inward_meter_count_project_head_wise,
+            'em_total_outward_meter_count_project_head_wise' => $em_total_outward_meter_count_project_head_wise,
+            'total_rejected_meter_count_project_head_wise' => $total_rejected_meter_count_project_head_wise,
+            'count_pending_by_field_executive' => $count_pending_by_field_executive,
+         ];
+
+        return view('project_heads.index', compact('data'));
+    }
+    public function add_inventory_manager()
+    {
+        return view('project_heads.add_inventory_manager');
+    }
+    public function consumer_bulk_upload()
+    {
+        return view('project_heads.consumer_bulk_upload');
+    }
+    public function add_contractor()
+    {
+        return view('project_heads.add_contractor');
+    }
+    public function add_hescom()
+    {
+        return view('project_heads.add_hescom');
+    }
+    public function add_qc()
+    {
+        return view('project_heads.add_qc');
+    }
+    public function all_contractors()
+    {
+
+        // $data = Admin::where('type', 'contractor_manager')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get();
+        // dd($data);
+        return view('project_heads.all_contractors', [
+            'show_users' => Admin::where('type', 'contractor_manager')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get(),
+        ]);
+    }
+    public function all_hescoms()
+    {
+        return view('project_heads.all_hescoms', [
+            'show_users' => Admin::where('type', 'hescom_manager')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get(),
+        ]);
+    }
+    public function all_inventory_managers()
+    {
+        return view('project_heads.all_inventory_managers', [
+            'show_users' => Admin::where('type', 'inventory_manager')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get(),
+        ]);
+    }
+    public function all_qcs()
+    {
+        return view('project_heads.all_qcs', [
+            'show_users' => Admin::where('type', 'qc_manager')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get(),
+        ]);
+    }
+    public function all_users()
+    {
+        return view('project_heads.all_users');
+    }
+    public function login()
+    {
+        return view('project_heads.login');
+    }
+
+    public function authenticate(Request $request)
+    {
+        // print_r($request->all());
+
+        // dd($request);
+
+        $user = Admin::where('user_name', $request->user_name)->first();
+        if ($user) {
+            if ($user->type != 'project_head') {
+                return back()->withErrors('name', 'name is required!');
+                // return back()->with('success', 'Invalid Credentials');
+                // return back()->with('error', 'Invalid Credentials');
+                die();
+            }
+        } else {
+            return back()->withErrors('success', 'name is required!');
+
+            // return Redirect::back()->withErrors($validator);
+            // return back()->with('error', 'Invalid Credentials');
+            // return back()->withErrors('name' ,'name is required!');
+
+
+            die();
+        }
+        $formFields = $request->validate([
+            'user_name' => 'required',
+            'password' => 'required',
+            // 'type'=>'admin',
+        ]);
+        // if(auth()->type!="admin"){
+        // return back()->with('success', 'Invalid Credentials');
+        // }
+        if (auth()->attempt($formFields)) {
+            auth()->login($user);
+            $request->session()->regenerate();
+
+
+            Session::put('rexkod_project_head', $user);
+            Session::put('rexkod_project_head_user_name', $user->name);
+            Session::put('rexkod_vishvin_auth_userid', $user->id);
+            Session::put('rexkod_project_head_user_type', $user->type);
+            Session::put('rexkod_project_head_user_phone', $user->phone);
+
+            $user = admin::where('user_name', '=', $request->user_name)->first();
+            return redirect('/project_heads/index')->with('message', 'You are now logged in!');
+        }
+        return back()->withErrors('name', 'name is required!');
+
+        // return back()->withErrors(['user_name' => 'Invalid Credentials'])->onlyInput('user_name');
+        // return back()->with('error', 'Invalid Credentials');
+    }
+
+    function create_inventory_manager(Request $req)
+    {
+        // print_r($req->all());
+
+        $auth = new Admin;
+
+
+        $result = Admin::where('phone', $req->phone)->first();
+
+        if ($result) {
+            session()->put('failed', 'Phone already exists');
+
+            return redirect('/project_heads/add_inventory_manager');
+        } else {
+
+            $auth->name = $req->name;
+
+            $auth->phone = $req->phone;
+
+            $auth->project_name = $req->project_name;
+
+            $auth->type = "inventory_manager";
+            $auth->password = Hash::make($req->password);
+
+            if (strlen((string)$auth->phone) < 10) {
+                session()->put('failed', 'Mobile nummber should be at least 10 digits');
+                return redirect()->back();
+            }
+
+
+            $uppercase = preg_match('@[A-Z]@', $req->password);
+            $lowercase = preg_match('@[a-z]@', $req->password);
+            $number    = preg_match('@[0-9]@', $req->password);
+            $specialChars = preg_match('@[^\w]@', $req->password);
+
+            if (!$uppercase || !$lowercase || !$number || !$specialChars || strlen($req->password) < 8) {
+
+                session()->put('failed', 'Password should be atleast 8 characters & must include atleast one upper case letter, one number, and one special character');
+                return redirect()->back();
+            }
+
+            $auth->created_by = session()->get('rexkod_vishvin_auth_userid');
+            $auth->save();
+            session()->put('success', 'Inventory Manager added successfully');
+
+
+            return redirect('/project_heads/all_inventory_managers');
+        }
+    }
+    function create_qc_manager(Request $req)
+    {
+
+        $auth = new Admin;
+
+
+        $result = Admin::where('phone', $req->phone)->first();
+
+        if ($result) {
+            session()->put('failed', 'Phone already exists');
+
+            return redirect('/project_heads/add_qc_manager');
+        } else {
+
+            $auth->name = $req->name;
+
+            $auth->phone = $req->phone;
+
+            $auth->project_name = $req->project_name;
+
+            $auth->type = "qc_manager";
+            $auth->password = Hash::make($req->password);
+
+            if (strlen((string)$auth->phone) < 10) {
+                session()->put('failed', 'Mobile nummber should be at least 10 digits');
+                return redirect()->back();
+            }
+
+
+            $uppercase = preg_match('@[A-Z]@', $req->password);
+            $lowercase = preg_match('@[a-z]@', $req->password);
+            $number    = preg_match('@[0-9]@', $req->password);
+            $specialChars = preg_match('@[^\w]@', $req->password);
+
+            if (!$uppercase || !$lowercase || !$number || !$specialChars || strlen($req->password) < 8) {
+
+                session()->put('failed', 'Password should be atleast 8 characters & must include atleast one upper case letter, one number, and one special character');
+                return redirect()->back();
+            }
+
+            $auth->created_by = session()->get('rexkod_vishvin_auth_userid');
+            $auth->save();
+            session()->put('success', 'QC Manager added successfully');
+
+
+            return redirect('/project_heads/all_qcs');
+        }
+    }
+    function create_hescom_manager(Request $req)
+    {
+        $auth = new Admin;
+
+
+        $result = Admin::where('phone', $req->phone)->first();
+
+        if ($result) {
+            session()->put('failed', 'Phone already exists');
+
+            return redirect('/project_heads/add_hescom');
+        } else {
+
+            $auth->name = $req->name;
+
+            $auth->phone = $req->phone;
+
+            $auth->project_name = $req->project_name;
+
+            $auth->type = "hescom_manager";
+            $auth->password = Hash::make($req->password);
+
+            if (strlen((string)$auth->phone) < 10) {
+                session()->put('failed', 'Mobile nummber should be at least 10 digits');
+                return redirect()->back();
+            }
+
+
+            $uppercase = preg_match('@[A-Z]@', $req->password);
+            $lowercase = preg_match('@[a-z]@', $req->password);
+            $number    = preg_match('@[0-9]@', $req->password);
+            $specialChars = preg_match('@[^\w]@', $req->password);
+
+            if (!$uppercase || !$lowercase || !$number || !$specialChars || strlen($req->password) < 8) {
+
+                session()->put('failed', 'Password should be atleast 8 characters & must include atleast one upper case letter, one number, and one special character');
+                return redirect()->back();
+            }
+
+            $auth->created_by = session()->get('rexkod_vishvin_auth_userid');
+            $auth->save();
+            session()->put('success', 'Hescom Manager added successfully');
+
+
+            return redirect('/project_heads/all_hescoms');
+        }
+    }
+    
+    function create_contractor_manager(Request $req)
+    {
+        // print_r($req->all());
+        $auth = new Admin;
+        $contractor = new Contractor;
+
+
+        $result = Admin::where('phone', $req->phone)->first();
+
+        if ($result) {
+            session()->put('failed', 'Phone already exists');
+
+            return redirect('/project_heads/add_contractor');
+        } else {
+
+            $auth->name = $req->name;
+
+            $auth->phone = $req->phone;
+            // $auth->user_name = $req->user_name;
+            $auth->type = "contractor_manager";
+            $auth->password = Hash::make($req->password);
+
+
+            if (strlen((string)$auth->phone) < 10) {
+                session()->put('failed', 'Mobile number should be at least 10 digits');
+                return redirect()->back();
+            }
+
+
+            $uppercase = preg_match('@[A-Z]@', $req->password);
+            $lowercase = preg_match('@[a-z]@', $req->password);
+            $number    = preg_match('@[0-9]@', $req->password);
+            $specialChars = preg_match('@[^\w]@', $req->password);
+
+            if (!$uppercase || !$lowercase || !$number || !$specialChars || strlen($req->password) < 8) {
+
+                session()->put('failed', 'Password should be atleast 8 characters & must include atleast one upper case letter, one number, and one special character');
+                return redirect()->back();
+
+                //  "Password should be at least 8 characters in length and should include at least one upper case letter, one number, and one special character.";
+                //     redirect('pages/add_user');
+                // die;
+            }
+
+            $auth->created_by = session()->get('rexkod_vishvin_auth_userid');
+            $auth->save();
+            $auth->refresh();
+            $new_contractor_added = Admin::where('phone', $req->phone)->first();
+            // return ($new_contractor_added);
+
+            $contractor->auth_id = $new_contractor_added->id;
+            $contractor->contractor_name = $req->contractor_name;
+            $contractor->firm_name = $req->firm_name;
+            $contractor->house_no = $req->house_no;
+            $contractor->building_name = $req->building_name;
+            $contractor->road_name = $req->road_name;
+            $contractor->cross_name = $req->cross_name;
+            $contractor->area_name = $req->area_name;
+            $contractor->city_name = $req->city_name;
+            $contractor->pincode = $req->pincode;
+            $contractor->contractor_cell_no = $req->contractor_cell_no;
+            $contractor->contractor_email = $req->contractor_email;
+            $contractor->pan = $req->pan;
+            $contractor->gst = $req->gst;
+            $contractor->bank_name = $req->bank_name;
+            $contractor->bank_branch = $req->bank_branch;
+            $contractor->account_no = $req->account_no;
+            $contractor->ifsc_code = $req->ifsc_code;
+            $contractor->account_type = $req->account_type;
+            $contractor->pan_no = $req->pan_no;
+            $contractor->gst_no = $req->gst_no;
+
+            // if (!empty($req->file('pan'))) {
+            //     $extension1 = $req->file('pan')->extension();
+            //     if ($extension1 == "png" || $extension1 == "jpeg" || $extension1 == "jpg") {
+            //         $filename = Str::random(4) . time() . '.' . $extension1;
+            //         $contractor->pan = $req->file('pan')->move(('uploads'), $filename);
+            //     }
+            // }
+
+
+            if (!empty($req->file('pan'))) {
+                $file = $req->file('pan');
+                $mime_type = $file->getClientMimeType();
+                $extension = $file->getClientOriginalExtension();
+                if (($mime_type == 'image/png' || $mime_type == 'image/jpeg' || $mime_type == 'image/jpg') && ($extension == 'png' || $extension == 'jpeg' || $extension == 'jpg')) {
+                    $filename = Str::random(4) . time() . '.' . $extension;
+                    $contractor->pan = $file->move(('uploads'), $filename);
+                } else {
+                    session()->put('failed', 'Please add jpeg/png format images');
+                    return redirect('/project_heads/add_contractor');
+                }
+            }
+            if (!empty($req->file('gst'))) {
+                $file = $req->file('gst');
+                $mime_type = $file->getClientMimeType();
+                $extension = $file->getClientOriginalExtension();
+                if (($mime_type == 'image/png' || $mime_type == 'image/jpeg' || $mime_type == 'image/jpg') && ($extension == 'png' || $extension == 'jpeg' || $extension == 'jpg')) {
+                    $filename = Str::random(4) . time() . '.' . $extension;
+                    $contractor->gst = $file->move(('uploads'), $filename);
+                } else {
+                    session()->put('failed', 'Please add jpeg/png format images');
+                    return redirect('/project_heads/add_contractor');
+                }
+            }
+
+
+
+
+
+            $contractor->save();
+
+            session()->put('success', 'Contractor Manager added successfully');
+
+            // $user = Admin::where('user_name', $req->user_email)->first();
+
+            // $req->session()->put('user',$user);
+
+            return redirect('/project_heads/all_contractors');
+        }
+    }
+
+
+    public function logout(Request $request)
+    {
+        auth()->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/project_heads')->with('message', 'You have been logged out!');
+    }
+    public function upload_file(Request $req)
+    {
+        set_time_limit(7200);
+
+        $csvMimes = array('text/x-comma-separated-values', 'text/comma-separated-values', 'application/octet-stream', 'application/vnd.ms-excel', 'application/x-csv', 'text/x-csv', 'text/csv', 'application/csv', 'application/excel', 'application/vnd.msexcel', 'text/plain');
+
+        if (!empty($req->file('upload')) && $csvMimes) {
+
+
+            if (is_uploaded_file($req->file('upload'))) {
+
+
+                $csvFile = fopen($req->file('upload'), 'r');
+
+                fgetcsv($csvFile);
+
+                while (($line = fgetcsv($csvFile)) !== false) {
+                    for ($i = 0; $i < 15; $i++) {
+                        if (str_contains($line[$i], 'script')) {
+                            session()->flush();
+                            return redirect('login');
+                        }
+                    }
+                    //dd($line);
+
+                    //commentted checking dupilcation account id
+
+                    // $existingConsumer = Consumer_detail::where('account_id', $line[7])->first();
+                    // if ($existingConsumer == null) {
+                        $consumer = new Consumer_detail();
+                        // $consumer->tariff = $line[1];
+
+                        // $consumer->mrcode = $line[2];
+                        // $consumer->account_id = $line[3];
+                        // // dd($line[3]);
+                        // $consumer->rr_no = $line[4];
+                        // $consumer->consumer_name = $line[5];
+                        // $consumer->consumer_address = $line[6];
+                        // // $consumer->read_date = $line[7];
+                        // $consumer->meter_type = $line[7];
+                        // $consumer->longitude = $line[8];
+                        // $consumer->latitude = $line[9];
+                        // $consumer->hescom = $line[10];
+                        // $consumer->zone = $line[11];
+                        // $consumer->circle = $line[12];
+                        // $consumer->division = $line[13];
+                        // $consumer->sd_pincode = $line[14];
+                        // $consumer->so_pincode = $line[15];
+                        // $consumer->sub_division = $line[16];
+                        // $consumer->section = $line[17];
+                        // $consumer->read_date = $line[18];
+
+                        $consumer->rr_no = $line[1];
+                        $consumer->account_id = $line[2];
+                        $consumer->consumer_name = $line[3];
+                        $consumer->consumer_address = $line[4];
+                        $consumer->so_pincode = $line[5];
+                        $consumer->sd_pincode = $line[6];
+                        $meter_type =null;
+						$phase_name =null;
+                        if(trim(Str::lower($line[22])) === 'single phase' || trim(Str::lower($line[22])) === 'singlephase'){
+                            $meter_type = 1;
+	                        $phase_name = 'Single Phase';
+                        }
+                        if(trim(Str::lower($line[22])) === 'three phase' || trim(Str::lower($line[22])) === 'threephase'){
+                            $meter_type = 2;
+							$phase_name = 'Three Phase';
+                        }
+                        $consumer->meter_type = $meter_type;
+                        $consumer->tariff = $line[10];
+                        $consumer->mrcode = $line[11];
+                        $consumer->division = $line[15];
+                        $consumer->section = $line[16];
+                        $consumer->sub_division = $line[17];
+                        $consumer->sp_id = $line[19];
+
+                        $consumer->feeder_name = $line[20];
+                        $consumer->feeder_code = $line[21];
+                        $consumer->phase_type = $phase_name;
+                            // $consumer->read_date = $line[11];
+                        $consumer->save();
+                        //dd($consumer);
+                    // } else {
+                    //     continue;
+                    // }
+                }
+                fclose($csvFile);
+            }
+        }
+        session()->put('success', 'Bulk Upload Successfull');
+        return redirect('/admins/index');
+    }
+
+
+
+
+
+
+
+
+
+    public function upload_file1(Request $req)
+    {
+        $csvMimes = array('text/x-comma-separated-values', 'text/comma-separated-values', 'application/octet-stream', 'application/vnd.ms-excel', 'application/x-csv', 'text/x-csv', 'text/csv', 'application/csv', 'application/excel', 'application/vnd.msexcel', 'text/plain');
+
+        if (!empty($req->file('upload')) && $csvMimes) {
+
+            if (is_uploaded_file($req->file('upload'))) {
+
+                $csvFile = fopen($req->file('upload'), 'r');
+                fgetcsv($csvFile);
+
+                while (($line = fgetcsv($csvFile)) !== FALSE) {
+
+                    $validator = Validator::make($line, [
+                        'account_id' => 'required|unique:consumer_details,account_id',
+                    ]);
+
+                    if ($validator->fails()) {
+                        // Account ID already exists, skip this row
+                        continue;
+                    }
+
+                    for ($i = 0; $i < 22; $i++) {
+                        if (str_contains($line[$i], 'script')) {
+                            session()->flush();
+                            return redirect('login');
+                        }
+                    }
+
+                    // Create new consumer detail record
+                    $consumer = new Consumer_detail;
+                    $consumer->tariff = $line[1];
+                    $consumer->mrcode = $line[2];
+                    $consumer->account_id = $line[3];
+                    $consumer->rr_no = $line[4];
+                    $consumer->consumer_name = $line[5];
+                    $consumer->consumer_address = $line[6];
+                    $consumer->read_date = $line[7];
+                    $consumer->meter_type = $line[8];
+                    $consumer->longitude = $line[10];
+                    $consumer->latitude = $line[11];
+                    $consumer->hescom = $line[12];
+                    $consumer->zone = $line[13];
+                    $consumer->circle = $line[14];
+                    $consumer->division = $line[15];
+                    $consumer->sd_pincode = $line[16];
+                    $consumer->so_pincode = $line[17];
+                    $consumer->save();
+                }
+                fclose($csvFile);
+            }
+        }
+
+        session()->put('success', 'Bulk Upload Successfull');
+        return redirect('/admins/index');
+    }
+
+
+    public function add_bmr()
+    {
+        return view('project_heads.add_bmr');
+    }
+
+    function create_bmr(Request $req)
+    {
+        // print_r($req->all());
+
+        $auth = new Admin;
+
+
+        $result = Admin::where('phone', $req->phone)->first();
+
+        if ($result) {
+            session()->put('failed', 'Phone already exists');
+
+            return redirect('/project_heads/add_bmr');
+        } else {
+
+            $auth->name = $req->name;
+
+            $auth->phone = $req->phone;
+
+            $auth->project_name = $req->project_name;
+
+            $auth->type = "bmr";
+            $auth->password = Hash::make($req->password);
+
+            if (strlen((string)$auth->phone) < 10) {
+                session()->put('failed', 'Mobile nummber should be at least 10 digits');
+                return redirect()->back();
+            }
+
+
+            $uppercase = preg_match('@[A-Z]@', $req->password);
+            $lowercase = preg_match('@[a-z]@', $req->password);
+            $number    = preg_match('@[0-9]@', $req->password);
+            $specialChars = preg_match('@[^\w]@', $req->password);
+
+            if (!$uppercase || !$lowercase || !$number || !$specialChars || strlen($req->password) < 8) {
+
+                session()->put('failed', 'Password should be atleast 8 characters & must include atleast one upper case letter, one number, and one special character');
+                return redirect()->back();
+            }
+
+            $auth->created_by = session()->get('rexkod_vishvin_auth_userid');
+            $auth->save();
+            session()->put('success', 'Inventory Manager added successfully');
+
+
+            return redirect('/project_heads/all_bmr');
+        }
+
+    }
+
+    public function all_bmr()
+        {
+
+            // $data = Admin::where('type', 'contractor_manager')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get();
+            // dd($data);
+            return view('project_heads.all_bmr', [
+                'show_users' => Admin::where('type', 'bmr')->where('created_by', session()->get('rexkod_vishvin_auth_userid'))->get(),
+            ]);
+        }
+
+        public function reports(){
+            $total_meter_replaced = count(Meter_main::get());
+            $pending_in_qc = count(Meter_main::where('qc_status',0)->get());
+            $pending_in_ae = count(Meter_main::where('qc_status',1)->where('so_status',0)->get());
+            $pending_in_aee = count(Meter_main::where('qc_status',1)->where('so_status',1)->where('aee_status',0)->get());
+            $pending_in_aao = count(Meter_main::where('qc_status',1)->where('so_status',1)->where('aee_status',1)->where('aao_status',0)->get());
+
+            $get_total_successful_record_bmr = DB::table('successful_records')
+            ->get();
+$get_total_successful_record_count_bmr = count($get_total_successful_record_bmr);
+            $error_records =count(Error_record::where('updated_by_aao',0)->get());
+
+            // pending at bmr download
+            $approved_meters = Meter_main::where(function ($query)  {
+                $query->where('aao_status', 1)
+                      ->where('download_flag',0);
+            })
+            ->orWhere(function ($query) {
+                $query->where('error_updated_by_aao', 1);
+                // ->where('download_flag',0);
+            })
+            ->get();
+            $pending_in_bmr = count($approved_meters);
+            $data = [
+                'total_meter_replaced' => $total_meter_replaced,
+                'pending_in_qc' => $pending_in_qc,
+                'pending_in_ae' => $pending_in_ae,
+                'pending_in_aee' => $pending_in_aee,
+                'pending_in_aao' => $pending_in_aao,
+
+                'error_records' => $error_records,
+                'get_total_successful_record_count_bmr' => $get_total_successful_record_count_bmr,
+                'pending_in_bmr' => $pending_in_bmr,
+
+            ];
+
+            return view('project_heads.reports', ['data' => $data]);
+        }
+
+
+
+public function report_filter_view(){
+
+    return view('project_heads.report_filter');
+}
+
+public function get_sd_code($division)
+{
+    $sd_pincode = DB::table('zone_codes')
+    ->select('sd_code', 'sub_division')
+    ->where('div_code', $division)
+    ->groupBy('sd_code', 'sub_division')
+    ->get();
+
+    return response()->json($sd_pincode);
+}
+public function get_so_code($sub_division)
+{
+    # code...
+    $so_pincode = DB::table('zone_codes')
+        // ->select('sd_code')
+        ->where('sd_code', $sub_division)
+        ->get();
+
+    return response()->json($so_pincode);
+}
+
+public function report_filter(Request $req){
+    // dd($req->format);
+    $end_date = null;
+    if($req->format == 'weekly'){
+        $today = Carbon::now();
+        $dateSevenDaysAgo = Carbon::now()->subDays(7);
+        $start_date = $dateSevenDaysAgo->format('Y-m-d');
+        $end_date = $today->format('Y-m-d');
+    }else if($req->format == 'monthly'){
+        $today = Carbon::now();
+        $dateMonthsAgo = Carbon::now()->subDays(30);
+        $start_date = $dateMonthsAgo->format('Y-m-d');
+        $end_date = $today->format('Y-m-d');
+    }else if($req->format == 'daily'){
+        // $today = Carbon::now();
+        $start_date = Carbon::now()->format('Y-m-d');
+        // $end_date = Carbon::parse($start_date)->addDay()->format('Y-m-d');
+        $end_date = $start_date;
+    }
+    else if($req->format == 'custom'){
+        if ($req->get('start_date') !== NUll && $req->get('end_date') !== NUll) {
+            $start_date = $req->get('start_date');
+            $end_date = $req->get('end_date');
+            // adding one day because its coming till the prevoius day - because the timestamp is differnt in the mysql
+            $end_date = Carbon::parse($end_date)->addDay()->format('Y-m-d');
+
+        }
+    }
+    if($req->section){
+        $section = $req->section;
+    }else{
+        $section = null;
+    }
+    if($req->division){
+        $division = $req->division;
+    }else{
+        $division = null;
+    }
+    if($req->sub_division){
+        $sub_division = $req->sub_division;
+    }else{
+        $sub_division = null;
+    }
+    // reports
+        if($req->report_type == 1){
+            return redirect('/project_heads/release_meter_report/'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section);
+        }
+        else if($req->report_type == 2){
+            // return redirect('/project_heads/meter_replacement_report/'.$req->section . '/'.$start_date . '/'.$end_date);
+            return redirect('/project_heads/meter_replacement_report/'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section);
+        }
+        else if($req->report_type == 3){
+            // return redirect('/project_heads/anx_1_abstract_report/'.$req->section . '/'.$start_date . '/'.$end_date);
+            return redirect('/project_heads/anx_1_abstract_report/'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section);
+
+        }
+        else if($req->report_type == 4){
+            // return redirect('/project_heads/anx_1_detailed_report/'.$req->section . '/'.$start_date . '/'.$end_date);
+            return redirect('/project_heads/anx_1_detailed_report/'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section);
+
+        }
+        else if($req->report_type == 5){
+            // return redirect('/project_heads/anx_3_report/'.$req->section . '/'.$start_date . '/'.$end_date);
+            return redirect('/project_heads/anx_3_report/'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section);
+
+        }
+        else if($req->report_type == 6){
+            $success_query = DB::table('successful_records')
+            ->join('meter_mains', 'successful_records.account_id', '=', 'meter_mains.account_id')
+            ->join('consumer_details', 'successful_records.account_id', '=', 'consumer_details.account_id')
+            ->where('successful_records.created_at', '>=', $start_date)
+            ->where('successful_records.created_at', '<=', $end_date)
+            ->whereNotNull('meter_mains.serial_no_new')
+            ->whereNotNull('serial_no_old')
+            ->select(\DB::raw('successful_records.created_at as successful_records_report_created_at, successful_records.updated_at as successful_records_report_updated_at'), 'meter_mains.*', 'consumer_details.*');
+            if ($division != null) {
+                $success_query->where('consumer_details.division', '=', $division);
+            }
+        
+            if ($sub_division != null) {
+                $success_query->where('consumer_details.sd_pincode', '=', $sub_division);
+            }
+            if ($section != null) {
+                $success_query->where('consumer_details.section', '=', $section);
+            }
+        
+           
+         
+        
+        try{
+            $success_query_results = $success_query->get();
+            //dd($results);
+        }
+        catch(\Exception $e){
+            dd($e);
+        }
+            $error_query = DB::table('error_records')
+            ->join('meter_mains', 'error_records.account_id', '=', 'meter_mains.account_id')
+            ->join('consumer_details', 'error_records.account_id', '=', 'consumer_details.account_id')
+            ->where('error_records.created_at', '>=', $start_date)
+            ->where('error_records.created_at', '<=', $end_date)
+            ->whereNotNull('meter_mains.serial_no_new')
+            ->whereNotNull('serial_no_old')
+            ->select(\DB::raw('error_records.error_reason, error_records.updated_by_aao as error_updated_by_aao, error_records.created_at as error_report_created_at, error_records.updated_at as error_report_updated_at'), 'meter_mains.*', 'consumer_details.*');
+            if ($division != null) {
+                $error_query->where('consumer_details.division', '=', $division);
+            }
+        
+            if ($sub_division != null) {
+                $error_query->where('consumer_details.sd_pincode', '=', $sub_division);
+            }
+            if ($section != null) {
+                $error_query->where('consumer_details.section', '=', $section);
+            }
+        
+       try{
+            $error_query_results = $error_query->get();
+            //dd($results);
+        }
+        catch(\Exception $e){
+            dd($e);
+        }
+        $results = [
+            'success_count' => count($success_query_results),
+            'error_count' => count($error_query_results),
+            'success_report_url' => env('APP_URL') . '/project_heads/view_bmr_status_success_report/'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section,
+            'error_report_url' => env('APP_URL') . '/project_heads/view_bmr_status_error_report/'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section,
+            'from_date' => $start_date,
+            'to_date' => $end_date,
+            'section' => $section,
+            'report_type' => "6",
+            'format' => $req->format,
+
+        ];
+            // return redirect('/project_heads/anx_3_report/'.$req->section . '/'.$start_date . '/'.$end_date);
+            return  view('/project_heads/report_filter', ['data' => $results]);
+           // return redirect('/project_heads/report_filter'.$start_date . '/'.$end_date. '/'.$division. '/'.$sub_division.'/'.$section);
+
+        }
+
+}
+
+
+
+
+public function release_meter_report($start_date, $end_date = null, $division = null, $subdivision = null,$section = null){
+
+    $admin = Admin::where('id',session('rexkod_vishvin_auth_userid'))->first();
+    // Initialize the base query
+    $contractors = DB::table('admins')->where('type', '=','contractor_manager')->select('admins.id as contractor_id', 'admins.name as contractor_name')->get();
+    //dd($contractors);
+
+    //$fieldExecutives = DB::table('admins')->where('type', '=','field_executive')->select('admins.id as field_executive_id', 'admins.name as field_executive_name', 'admins.created_by as field_executive_contractor_id')->get();
+    //dd($fieldExecutives);
+
+    $query = DB::table('meter_mains')
+                ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                ->join('admins', 'meter_mains.created_by', "=", "admins.id")
+                ->whereNotNull('meter_mains.serial_no_new')
+                ->whereNotNull('serial_no_old')
+                ->where('meter_mains.created_at', '>=', $start_date)
+                ->select(\DB::raw('meter_mains.created_by as field_executive_id, admins.name as field_executive_name, admins.created_by as field_executive_contractor_id'), 'meter_mains.*', 'consumer_details.*');
+
+    // Add division and subdivision conditions if provided
+    if ($division != null) {
+        $query->where('consumer_details.division', '=', $division);
+    }
+
+    if ($subdivision != null) {
+        $query->where('consumer_details.sd_pincode', '=', $subdivision);
+    }
+    if ($section != null) {
+        $query->where('consumer_details.so_pincode', '=', $section);
+    }
+
+    // Add end date condition if provided
+    if ($end_date != null) {
+        $query->where('meter_mains.created_at', '<=', $end_date);
+    }
+    // Execute the query
+    try{
+        $meter_main = $query->get();
+        //dd($meter_main);
+    }
+    catch(\Exception $e){
+        dd($e);
+    }
+
+//    $changedMeterMainData = array();
+//   foreach($meter_main as $meterMainKey=>$meterMainData){
+//       foreach($contractors as $contractorKey => $contractorData){
+//           //dd($meterMainData->field_executive_contractor_id, $contractorData->contractor_id);
+//           $changedMeterMainData[] = $meterMainData;
+//
+//           if($meterMainData->field_executive_contractor_id === (string)$contractorData->contractor_id){
+//               dd($meterMainData, $contractorData, $changedMeterMainData[$meterMainKey]);
+//               ['field_executive_contractor_name'] = (string)$contractorData->contractor_name;
+//           }
+//           dd($changedMeterMainData);
+//       }
+//   }
+//    dd($changedMeterMainData);
+    $data = [
+        'meter_main' => $meter_main,
+        'division' => $division,
+        'subdivision' => $subdivision,
+        'section' => $section,
+        'contractors' => $contractors,
+        'users' => $admin,
+    ];
+    //dd($data);
+    return view('project_heads.release_meter_report', ['data' => $data]);
+}
+
+public function meter_replacement_report($start_date, $end_date = null, $division = null, $subdivision = null,$section = null){
+
+    $admin = Admin::where('id',session('rexkod_vishvin_auth_userid'))->first();
+    // Initialize the base query
+    $contractors = DB::table('admins')->where('type', '=','contractor_manager')->select('admins.id as contractor_id', 'admins.name as contractor_name')->get();
+    //dd($contractors);
+
+    //$fieldExecutives = DB::table('admins')->where('type', '=','field_executive')->select('admins.id as field_executive_id', 'admins.name as field_executive_name', 'admins.created_by as field_executive_contractor_id')->get();
+    //dd($fieldExecutives);
+
+    $query = DB::table('meter_mains')
+        ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+        ->join('admins', 'meter_mains.created_by', "=", "admins.id")
+        ->whereNotNull('meter_mains.serial_no_new')
+        ->whereNotNull('serial_no_old')
+        ->where('meter_mains.created_at', '>=', $start_date)
+        ->select(\DB::raw('meter_mains.created_by as field_executive_id, admins.name as field_executive_name, admins.created_by as field_executive_contractor_id'), 'meter_mains.*', 'consumer_details.*');
+//    $query = Meter_main::join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+//                        ->whereNotNull('meter_mains.serial_no_new')
+//                        ->whereNotNull('serial_no_old')
+//                        ->where('meter_mains.created_at', '>=', $start_date)
+//                        ->select('meter_mains.*', 'consumer_details.*');
+
+    // Add division and subdivision conditions if provided
+    if ($division != null) {
+        $query->where('consumer_details.division', '=', $division);
+    }
+
+    if ($subdivision != null) {
+        $query->where('consumer_details.sd_pincode', '=', $subdivision);
+    }
+    if ($section != null) {
+        $query->where('consumer_details.so_pincode', '=', $section);
+    }
+
+    // Add end date condition if provided
+    if ($end_date != null) {
+        $query->where('meter_mains.created_at', '<=', $end_date);
+    }
+
+    // Execute the query
+    try{
+        $meter_main = $query->get();
+        //dd($meter_main);
+    }
+    catch(\Exception $e){
+        dd($e);
+    }
+
+
+    $data = [
+        'meter_main' => $meter_main,
+        'division' => $division,
+        'subdivision' => $subdivision,
+        'section' => $section,
+        'contractors' => $contractors,
+        'users' => $admin,
+    ];
+    //dd($data);
+
+    return view('project_heads.meter_replacement_report', ['data' => $data]);
+}
+
+public function anx_1_detailed_report1($section, $start_date, $end_date = null){
+    if($end_date == null){
+        $meter_main = Meter_main::join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                    ->join('zone_codes', 'zone_codes.so_code', '=', 'consumer_details.so_pincode')
+                                    ->whereNotNull('meter_mains.serial_no_new')
+                                    ->whereNotNull('serial_no_old')
+                                    ->where('meter_mains.created_at', '>=', $start_date)
+                                    ->where('consumer_details.so_pincode', '=', $section)
+                                    ->select('zone_codes.*','consumer_details.account_id','consumer_details.rr_no','consumer_details.tariff','meter_mains.final_reading','meter_mains.initial_reading_kwh','meter_mains.created_at','meter_mains.so_status','meter_mains.aee_status','meter_mains.aao_status')
+                                    ->get();
+                                    // dd($meter_main);
+
+        $zone_code = Zone_code::where('so_code',$section)->first();
+            $data = [
+                'meter_main' => $meter_main,
+                'zone_code' => $zone_code,
+            ];
+    }else{
+
+        $meter_main = Meter_main::join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                    ->join('zone_codes', 'zone_codes.so_code', '=', 'consumer_details.so_pincode')
+                                    ->whereNotNull('meter_mains.serial_no_new')
+                                    ->whereNotNull('serial_no_old')
+                                    ->where('meter_mains.created_at', '>=', $start_date)
+                                    ->where('meter_mains.created_at', '<=', $end_date)
+                                    ->where('consumer_details.so_pincode', '=', $section)
+                                    ->select('zone_codes.*','consumer_details.account_id','consumer_details.rr_no','consumer_details.tariff','meter_mains.final_reading','meter_mains.initial_reading_kwh','meter_mains.created_at','meter_mains.so_status','meter_mains.aee_status')
+                                    ->get();
+        $zone_code = Zone_code::where('so_code',$section)->first();
+
+        $data = [
+            'meter_main' => $meter_main,
+            'zone_code' => $zone_code,
+
+        ];
+    }
+
+
+    return view('project_heads.anx_1_detailed_report', ['data' => $data]);
+}
+
+public function anx_1_detailed_report($start_date, $end_date = null, $division = null, $subdivision = null,$section = null){
+    // Initialize the base query
+    $query = Meter_main::join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                    ->join('zone_codes', 'zone_codes.so_code', '=', 'consumer_details.so_pincode')
+                                    ->whereNotNull('meter_mains.serial_no_new')
+                                    ->whereNotNull('serial_no_old')
+                                    ->where('meter_mains.created_at', '>=', $start_date)
+                                    ->select('zone_codes.*','consumer_details.account_id','consumer_details.rr_no','consumer_details.tariff','meter_mains.final_reading','meter_mains.initial_reading_kwh','meter_mains.created_at','meter_mains.so_status','meter_mains.aee_status');
+
+    // Add division and subdivision conditions if provided
+    if ($division != null) {
+        $query->where('consumer_details.division', '=', $division);
+    }
+
+    if ($subdivision != null) {
+        $query->where('consumer_details.sd_pincode', '=', $subdivision);
+    }
+    if ($section != null) {
+        $query->where('consumer_details.so_pincode', '=', $section);
+    }
+
+    // Add end date condition if provided
+    if ($end_date != null) {
+        $query->where('created_at', '<=', $end_date);
+    }
+
+    // Execute the query
+    $meter_main = $query->get();
+
+
+    $data = [
+        'meter_main' => $meter_main,
+        'division' => $division,
+        'subdivision' => $subdivision,
+        'section' => $section,
+
+    ];
+
+    return view('project_heads.anx_1_detailed_report', ['data' => $data]);
+}
+
+
+public function anx_1_abstract_report($start_date, $end_date = null, $division = null, $subdivision = null,$section = null){
+    // Initialize the base query
+    $query = DB::table('meter_mains')
+                ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                ->join('annexure_1s', 'annexure_1s.so_pincode', '=', 'consumer_details.so_pincode')
+                ->whereNotNull('meter_mains.serial_no_new')
+                ->whereNotNull('serial_no_old')
+                ->where('meter_mains.created_at', '>=', $start_date)
+                ->groupBy('consumer_details.so_pincode', 'annexure_1s.target_to_achieve','annexure_1s.sd_pincode','annexure_1s.division')
+                ->select('consumer_details.so_pincode', DB::raw('COUNT(*) as replaced_count'), 'annexure_1s.target_to_achieve','annexure_1s.sd_pincode','annexure_1s.division',
+                DB::raw('SUM(CASE WHEN meter_mains.aao_status = 1 THEN 1 ELSE 0 END) as bmr_prepared'),// if aao approved and it is in bmr
+                DB::raw('SUM(CASE WHEN meter_mains.download_flag != 0 THEN 1 ELSE 0 END) as bmr_updated_count'));//if bmr generated the report
+
+    // Add division and subdivision conditions if provided
+    if ($division != null) {
+        $query->where('consumer_details.division', '=', $division);
+    }
+
+    if ($subdivision != null) {
+        $query->where('consumer_details.sd_pincode', '=', $subdivision);
+    }
+    if ($section != null) {
+        $query->where('consumer_details.so_pincode', '=', $section);
+    }
+
+    // Add end date condition if provided
+    if ($end_date != null) {
+        $query->where('meter_mains.created_at', '<=', $end_date);
+    }
+
+    // Execute the query
+    $annexure_1 = $query->get();
+
+
+    $data = [
+        'annexure_1' => $annexure_1,
+        'division' => $division,
+        'subdivision' => $subdivision,
+        'section' => $section,
+
+    ];
+
+    return view('project_heads.anx_1_abstract_report', ['data' => $data]);
+}
+
+public function anx_3_report($start_date, $end_date = null, $division = null, $subdivision = null,$section = null){
+    // Initialize the base query
+    $query = DB::table('meter_mains')
+                ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                ->join('annexure_1s', 'annexure_1s.so_pincode', '=', 'consumer_details.so_pincode')
+                ->whereNotNull('meter_mains.serial_no_new')
+                ->whereNotNull('serial_no_old')
+                ->where('meter_mains.created_at', '>=', $start_date)
+                ->groupBy('consumer_details.so_pincode', 'annexure_1s.target_to_achieve','annexure_1s.sd_pincode','annexure_1s.division')
+                ->select('consumer_details.so_pincode', DB::raw('COUNT(*) as replaced_count'), 'annexure_1s.target_to_achieve','annexure_1s.sd_pincode','annexure_1s.division',
+                DB::raw('SUM(CASE WHEN meter_mains.qc_status = 0 THEN 1 ELSE 0 END) as pending_for_verification'),// pending_for_verification at qc
+                DB::raw('SUM(CASE WHEN meter_mains.aee_status = 1 AND meter_mains.aao_status = 0 THEN 1 ELSE 0 END) as pending_for_approval'),// pending_for_verification at aao
+                DB::raw('SUM(CASE WHEN meter_mains.aao_status = 1 AND meter_mains.download_flag = 0 THEN 1 ELSE 0 END) as pending_for_bmr_upload'));//if bmr not generated the report
+    // Add division and subdivision conditions if provided
+    if ($division != null) {
+        $query->where('consumer_details.division', '=', $division);
+    }
+
+    if ($subdivision != null) {
+        $query->where('consumer_details.sd_pincode', '=', $subdivision);
+    }
+    if ($section != null) {
+        $query->where('consumer_details.so_pincode', '=', $section);
+    }
+
+    // Add end date condition if provided
+    if ($end_date != null) {
+        $query->where('meter_mains.created_at', '<=', $end_date);
+    }
+
+    // Execute the query
+    $annexure_1 = $query->get();
+
+    $data = [
+        'annexure_1' => $annexure_1,
+        'division' => $division,
+        'subdivision' => $subdivision,
+        'section' => $section,
+
+    ];
+
+    return view('project_heads.anx_3_report', ['data' => $data]);
+}
+
+// inventory reports
+public function inventory_report_filter_view(){
+
+    return view('project_heads.inventory_report_filter');
+}
+
+
+public function inventory_report_filter(Request $req){
+    // dd($req->format);
+    $end_date = null;
+    if($req->format == 'weekly'){
+        $today = Carbon::now();
+        $dateSevenDaysAgo = Carbon::now()->subDays(7);
+        $start_date = $dateSevenDaysAgo->format('Y-m-d');
+        $end_date = $today->format('Y-m-d');
+    }else if($req->format == 'monthly'){
+        $today = Carbon::now();
+        $dateMonthsAgo = Carbon::now()->subDays(30);
+
+        $start_date = $dateMonthsAgo->format('Y-m-d');
+        $end_date = $today->format('Y-m-d');
+    }else if($req->format == 'daily'){
+        // $today = Carbon::now();
+        $start_date = Carbon::now();
+    }
+    else if($req->format == 'custom'){
+        if ($req->get('start_date') !== NUll && $req->get('end_date') !== NUll) {
+            $start_date = $req->get('start_date');
+            $end_date = $req->get('end_date');
+            // adding one day because its coming till the prevoius day - because the timestamp is differnt in the mysql
+            $end_date = Carbon::parse($end_date)->addDay()->format('Y-m-d');
+
+        }
+    }
+
+    // reports
+        if($req->report_type == 1){
+            return redirect('/project_heads/inward_meter_report/'.$req->division . '/'.$start_date . '/'.$end_date);
+        }
+        else if($req->report_type == 2){
+            return redirect('/project_heads/outward_meter_report/'.$req->division . '/'.$start_date . '/'.$end_date);
+        }
+        else if($req->report_type == 3){
+            return redirect('/project_heads/contractor_wise_stock_report/'.$req->division . '/'.$start_date . '/'.$end_date);
+        }
+        else if($req->report_type == 4){
+            return redirect('/project_heads/contractor_wise_installation_report/'.$req->division . '/'.$start_date . '/'.$end_date);
+        }
+        else if($req->report_type == 5){
+            return redirect('/project_heads/qc_report/'.$req->division . '/'.$start_date . '/'.$end_date);
+        }
+        else if($req->report_type == 6){
+            return redirect('/project_heads/fe_wise_installation_report/'.$req->division . '/'.$start_date . '/'.$end_date);
+        }
+
+}
+
+public function inward_meter_report($division, $start_date, $end_date = null){
+    if($end_date == null){
+        $inward_meter = Warehouse_meter::join('lot_details as lot', 'warehouse_meters.lot_no', '=', 'lot.id')
+                        ->where('lot.created_at', '>=', $start_date)
+                        ->where('lot.division', '=', $division)
+                        ->where('lot.complete_status', 1)
+                        ->select('lot.created_at', 'lot.id',
+                        \DB::raw('count(*) as box_count'),
+                        \DB::raw("SUM(LENGTH(warehouse_meters.meter_serial_no) - LENGTH(REPLACE(warehouse_meters.meter_serial_no, ',', '')) + 1) as comma_count"))
+                        ->groupBy('lot.id', 'lot.created_at') // Include all non-aggregated columns in the GROUP BY clause
+                        ->get();
+
+
+        $data = [
+            'inward_meter' => $inward_meter,
+        ];
+    }else{
+
+    $inward_meter = Warehouse_meter::join('lot_details as lot', 'warehouse_meters.lot_no', '=', 'lot.id')
+                    ->where('lot.created_at', '>=', $start_date)
+                    ->where('lot.created_at', '<=', $end_date)
+                    ->where('lot.division', '=', $division)
+                    ->where('lot.complete_status', 1)
+                    ->select('lot.created_at', 'lot.id',
+                    \DB::raw('count(*) as box_count'),
+                    \DB::raw("SUM(LENGTH(warehouse_meters.meter_serial_no) - LENGTH(REPLACE(warehouse_meters.meter_serial_no, ',', '')) + 1) as comma_count"))
+                    ->groupBy('lot.id', 'lot.created_at') // Include all non-aggregated columns in the GROUP BY clause
+                    ->get();
+
+
+        $data = [
+            'inward_meter' => $inward_meter,
+        ];
+    }
+
+    return view('project_heads.inward_meter_report', ['data' => $data]);
+
+}
+
+public function outward_meter_report($division, $start_date, $end_date = null){
+    if($end_date == null){
+        // $outward_meter = Contractor_inventory::join('warehouse_meters as ware', 'contractor_inventories.box_id', '=', 'ware.id')
+        // ->join('admins', 'contractor_inventories.contractor_id', '=', 'admins.id')
+        // ->where('contractor_inventories.created_at', '>=', $start_date)
+        // ->where('contractor_inventories.division', '=', $division)
+        // ->select('admins.name','contractor_inventories.created_at', 'contractor_inventories.contractor_id','contractor_inventories.division','ware.box_id','ware.lot_no',
+        // \DB::raw("LENGTH(serial_no) - LENGTH(REPLACE(serial_no, ',', '')) + 1 as meter_count"))
+        // ->get();
+
+    $outward_meter = Contractor_inventory::join('warehouse_meters as ware', 'contractor_inventories.box_id', '=', 'ware.id')
+    ->join('admins', 'contractor_inventories.contractor_id', '=', 'admins.id')
+    ->where('contractor_inventories.created_at', '>=', $start_date)
+    ->where('contractor_inventories.division', '=', $division)
+    ->select('admins.name', \DB::raw('DATE(contractor_inventories.created_at) as date'), 'contractor_inventories.contractor_id', 'contractor_inventories.division', 'ware.lot_no',
+        \DB::raw("SUM(
+            CASE
+                WHEN serial_no LIKE '%,%'
+                    THEN LENGTH(serial_no) - LENGTH(REPLACE(serial_no, ',', '')) + 1
+                WHEN serial_no IS NOT NULL AND serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as meter_count"),
+        \DB::raw("COUNT(ware.box_id) as box_id_count"))
+    ->groupBy('date', 'contractor_id', 'admins.name', 'ware.lot_no', 'contractor_inventories.division')
+    ->get();
+
+
+        $data = [
+            'outward_meter' => $outward_meter,
+        ];
+    }else{
+        // $outward_meter = Contractor_inventory::join('warehouse_meters as ware', 'contractor_inventories.box_id', '=', 'ware.id')
+        // ->join('admins', 'contractor_inventories.contractor_id', '=', 'admins.id')
+        // ->where('contractor_inventories.created_at', '>=', $start_date)
+        // ->where('contractor_inventories.created_at', '<=', $end_date)
+        // ->where('contractor_inventories.division', '=', $division)
+        // ->select('admins.name','contractor_inventories.created_at', 'contractor_inventories.contractor_id','contractor_inventories.division','ware.box_id','ware.lot_no',
+        // \DB::raw("LENGTH(serial_no) - LENGTH(REPLACE(serial_no, ',', '')) + 1 as meter_count"))
+        // ->get();
+
+
+       $outward_meter = Contractor_inventory::join('warehouse_meters as ware', 'contractor_inventories.box_id', '=', 'ware.id')
+    ->join('admins', 'contractor_inventories.contractor_id', '=', 'admins.id')
+    ->where('contractor_inventories.created_at', '>=', $start_date)
+    ->where('contractor_inventories.division', '=', $division)
+    ->select('admins.name', \DB::raw('DATE(contractor_inventories.created_at) as date'), 'contractor_inventories.contractor_id', 'contractor_inventories.division', 'ware.lot_no',
+        \DB::raw("SUM(
+            CASE
+                WHEN serial_no LIKE '%,%'
+                    THEN LENGTH(serial_no) - LENGTH(REPLACE(serial_no, ',', '')) + 1
+                WHEN serial_no IS NOT NULL AND serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as meter_count"),
+        \DB::raw("COUNT(ware.box_id) as box_id_count"))
+    ->groupBy('date', 'contractor_id', 'admins.name', 'ware.lot_no', 'contractor_inventories.division')
+    ->get();
+
+
+
+        $data = [
+            'outward_meter' => $outward_meter,
+        ];
+    }
+
+    return view('project_heads.outward_meter_report', ['data' => $data]);
+}
+
+public function contractor_wise_stock_report($division, $start_date, $end_date = null){
+    if($end_date == null){
+        $outward_meter = Contractor_inventory::join('admins', 'contractor_inventories.contractor_id', '=', 'admins.id')
+    ->where('contractor_inventories.created_at', '>=', $start_date)
+    ->where('contractor_inventories.division', '=', $division)
+    ->select('admins.name', \DB::raw('DATE(contractor_inventories.created_at) as date'), 'contractor_inventories.contractor_id',
+        \DB::raw("SUM(
+            CASE
+                WHEN serial_no LIKE '%,%'
+                    THEN LENGTH(serial_no) - LENGTH(REPLACE(serial_no, ',', '')) + 1
+                WHEN serial_no IS NOT NULL AND serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as meter_count"),
+        \DB::raw("SUM(
+            CASE
+                WHEN unused_meter_serial_no LIKE '%,%'
+                    THEN LENGTH(unused_meter_serial_no) - LENGTH(REPLACE(unused_meter_serial_no, ',', '')) + 1
+                WHEN unused_meter_serial_no IS NOT NULL AND unused_meter_serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as unused_meter_count"),
+        \DB::raw("SUM(
+            CASE
+                WHEN used_meter_serial_no LIKE '%,%'
+                    THEN LENGTH(used_meter_serial_no) - LENGTH(REPLACE(used_meter_serial_no, ',', '')) + 1
+                WHEN used_meter_serial_no IS NOT NULL AND used_meter_serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as used_meter_count"))
+    ->groupBy('date', 'contractor_id', 'admins.name')
+    ->get();
+
+
+        $data = [
+            'outward_meter' => $outward_meter,
+        ];
+    }else{
+        // $outward_meter = Contractor_inventory::join('admins', 'contractor_inventories.contractor_id', '=', 'admins.id')
+        // ->where('contractor_inventories.created_at', '>=', $start_date)
+        // ->where('contractor_inventories.created_at', '<=', $end_date)
+        // ->where('contractor_inventories.division', '=', $division)
+        // ->select('admins.name',\DB::raw('DATE(contractor_inventories.created_at) as date'), 'contractor_inventories.contractor_id',
+        // \DB::raw("COALESCE(LENGTH(serial_no) - LENGTH(REPLACE(serial_no, ',', '')) + 1, 0) as meter_count"),
+        // \DB::raw("COALESCE(LENGTH(unused_meter_serial_no) - LENGTH(REPLACE(unused_meter_serial_no, ',', '')) + 1, 0) as unused_meter_count"),
+        // \DB::raw("COALESCE(LENGTH(used_meter_serial_no) - LENGTH(REPLACE(used_meter_serial_no, ',', '')) + 1, 0) as used_meter_count"))
+        // ->groupBy('date', 'contractor_inventories.contractor_id', 'admins.name', 'meter_count', 'unused_meter_count', 'used_meter_count')
+        // ->get();
+
+    $outward_meter = Contractor_inventory::join('admins', 'contractor_inventories.contractor_id', '=', 'admins.id')
+    ->where('contractor_inventories.created_at', '>=', $start_date)
+    ->where('contractor_inventories.created_at', '<=', $end_date)
+    ->where('contractor_inventories.division', '=', $division)
+    ->select('admins.name', \DB::raw('DATE(contractor_inventories.created_at) as date'), 'contractor_inventories.contractor_id',
+        \DB::raw("SUM(
+            CASE
+                WHEN serial_no LIKE '%,%'
+                    THEN LENGTH(serial_no) - LENGTH(REPLACE(serial_no, ',', '')) + 1
+                WHEN serial_no IS NOT NULL AND serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as meter_count"),
+        \DB::raw("SUM(
+            CASE
+                WHEN unused_meter_serial_no LIKE '%,%'
+                    THEN LENGTH(unused_meter_serial_no) - LENGTH(REPLACE(unused_meter_serial_no, ',', '')) + 1
+                WHEN unused_meter_serial_no IS NOT NULL AND unused_meter_serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as unused_meter_count"),
+        \DB::raw("SUM(
+            CASE
+                WHEN used_meter_serial_no LIKE '%,%'
+                    THEN LENGTH(used_meter_serial_no) - LENGTH(REPLACE(used_meter_serial_no, ',', '')) + 1
+                WHEN used_meter_serial_no IS NOT NULL AND used_meter_serial_no != ''
+                    THEN 1
+                ELSE 0
+            END
+        ) as used_meter_count"))
+    ->groupBy('date', 'contractor_id', 'admins.name')
+    ->get();
+
+
+
+
+        $data = [
+            'outward_meter' => $outward_meter,
+        ];
+    }
+
+    return view('project_heads.contractor_wise_stock_report', ['data' => $data]);
+
+}
+
+public function contractor_wise_installation_report($division, $start_date, $end_date = null){
+    if($end_date == null){
+        $meter_main = Meter_main::join('admins', 'admins.id', '=', 'meter_mains.created_by')
+                                ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                ->where('consumer_details.division', '=', $division)
+                                ->where('meter_mains.created_at', '>=', $start_date)
+                                ->whereNotNull('meter_mains.serial_no_new')
+                                ->whereNotNull('meter_mains.serial_no_old')
+                                ->select(\DB::raw('DATE(meter_mains.created_at) as date'), 'admins.created_by as contractor_id', \DB::raw('(SELECT name FROM admins WHERE id = contractor_id) as contractor_name'),
+                                'consumer_details.division as division','consumer_details.sd_pincode as sd_pincode','consumer_details.so_pincode as so_pincode',
+                                \DB::raw('count(*) as installed_count'),
+                                )
+                                ->groupBy('date', 'contractor_id', 'division','sd_pincode','so_pincode')
+                                ->get();
+
+        $data = [
+            'meter_main' => $meter_main,
+        ];
+    }else{
+
+        $meter_main = Meter_main::join('admins', 'admins.id', '=', 'meter_mains.created_by')
+                                ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                ->where('consumer_details.division', '=', $division)
+                                ->where('meter_mains.created_at', '>=', $start_date)
+                                ->where('meter_mains.created_at', '<=', $end_date)
+                                ->whereNotNull('meter_mains.serial_no_new')
+                                ->whereNotNull('meter_mains.serial_no_old')
+                                ->select(\DB::raw('DATE(meter_mains.created_at) as date'), 'admins.created_by as contractor_id', \DB::raw('(SELECT name FROM admins WHERE id = contractor_id) as contractor_name'),
+                                'consumer_details.division as division','consumer_details.sd_pincode as sd_pincode','consumer_details.so_pincode as so_pincode',
+                                \DB::raw('count(*) as installed_count'),
+                                )
+                                ->groupBy('date', 'contractor_id', 'division','sd_pincode','so_pincode')
+                                ->get();
+
+
+        $data = [
+            'meter_main' => $meter_main,
+        ];
+    }
+
+    return view('project_heads.contractor_wise_installation_report', ['data' => $data]);
+
+}
+
+public function qc_report($division, $start_date, $end_date = null){
+    if($end_date == null){
+        $meter_main = Meter_main::join('admins', 'admins.id', '=', 'meter_mains.qc_updated_by')
+                                    ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                    ->where('consumer_details.division', '=', $division)
+                                    ->where('meter_mains.created_at', '>=', $start_date)
+                                    ->where('meter_mains.qc_status', '=', 1)
+                                    ->whereNotNull('meter_mains.serial_no_new')
+                                    ->whereNotNull('meter_mains.serial_no_old')
+                                    ->select(\DB::raw('DATE(meter_mains.qc_updated_at) as date'), 'meter_mains.qc_updated_by as qc_id','admins.name as qc_name',
+                                    'consumer_details.division as division','consumer_details.sd_pincode as sd_pincode','consumer_details.so_pincode as so_pincode',
+                                    \DB::raw('count(*) as installed_count'),
+                                    )
+                                    ->groupBy('date', 'qc_id','qc_name', 'division','sd_pincode','so_pincode')
+                                    ->get();
+
+        $data = [
+            'meter_main' => $meter_main,
+        ];
+    }else{
+
+        $meter_main = Meter_main::join('admins', 'admins.id', '=', 'meter_mains.qc_updated_by')
+                                    ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                    ->where('consumer_details.division', '=', $division)
+                                    ->where('meter_mains.created_at', '>=', $start_date)
+                                    ->where('meter_mains.created_at', '<=', $end_date)
+                                    ->where('meter_mains.qc_status', '=', 1)
+                                    ->whereNotNull('meter_mains.serial_no_new')
+                                    ->whereNotNull('meter_mains.serial_no_old')
+                                    ->select(\DB::raw('DATE(meter_mains.qc_updated_at) as date'), 'meter_mains.qc_updated_by as qc_id','admins.name as qc_name',
+                                    'consumer_details.division as division','consumer_details.sd_pincode as sd_pincode','consumer_details.so_pincode as so_pincode',
+                                    \DB::raw('count(*) as installed_count'),
+                                    )
+                                    ->groupBy('date', 'qc_id','qc_name', 'division','sd_pincode','so_pincode')
+                                    ->get();
+
+
+        $data = [
+            'meter_main' => $meter_main,
+        ];
+    }
+
+    return view('project_heads.qc_report', ['data' => $data]);
+
+}
+
+
+public function fe_wise_installation_report($division, $start_date, $end_date = null){
+    if($end_date == null){
+        $meter_main = Meter_main::join('admins', 'admins.id', '=', 'meter_mains.created_by')
+                                ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                ->where('consumer_details.division', '=', $division)
+                                ->where('meter_mains.created_at', '>=', $start_date)
+                                ->whereNotNull('meter_mains.serial_no_new')
+                                ->whereNotNull('meter_mains.serial_no_old')
+                                ->select(\DB::raw('DATE(meter_mains.created_at) as date'), 'admins.created_by as contractor_id', \DB::raw('(SELECT name FROM admins WHERE id = contractor_id) as contractor_name'),
+                                'consumer_details.division as division','consumer_details.sd_pincode as sd_pincode','consumer_details.so_pincode as so_pincode',
+                                \DB::raw('count(*) as installed_count'),
+                                )
+                                ->groupBy('date', 'contractor_id', 'division','sd_pincode','so_pincode')
+                                ->get();
+
+        $data = [
+            'meter_main' => $meter_main,
+        ];
+    }else{
+
+        $meter_main = Meter_main::join('admins', 'admins.id', '=', 'meter_mains.created_by')
+                                ->join('consumer_details', 'meter_mains.account_id', '=', 'consumer_details.account_id')
+                                ->where('consumer_details.division', '=', $division)
+                                ->where('meter_mains.created_at', '>=', $start_date)
+                                ->where('meter_mains.created_at', '<=', $end_date)
+                                ->whereNotNull('meter_mains.serial_no_new')
+                                ->whereNotNull('meter_mains.serial_no_old')
+                                ->select(\DB::raw('DATE(meter_mains.created_at) as date'), 'meter_mains.created_by as fe_id','admins.name as fe_name',
+                                'consumer_details.division as division','consumer_details.sd_pincode as sd_pincode','consumer_details.so_pincode as so_pincode',
+                                \DB::raw('count(*) as installed_count'),
+                                )
+                                ->groupBy('date', 'fe_id','fe_name', 'division','sd_pincode','so_pincode')
+                                ->get();
+
+
+        $data = [
+            'meter_main' => $meter_main,
+        ];
+    }
+
+    return view('project_heads.fe_wise_installation_report', ['data' => $data]);
+
+}
+
+
+    public function bmr_status_view(){
+        return view('project_heads.view_bmr_status');
+    }
+
+    public function bmr_status_view_ae(Request $req){
+        $section_code = $req->section;
+        $start_date = $request->fliterFrom;
+        $end_date = $request->fliterTo;
+        if(!empty($start_date) && !empty($end_date)){
+            return redirect('/project_heads/view_bmr_status_filter_view/'.$start_date . '/'.$end_date);
+        }
+        return view('project_heads.view_bmr_status_filter');
+    }
+
+    public function bmr_status_view_filter(Request $request){
+        $start_date = $request->fliterFrom;
+        $end_date = $request->fliterTo;
+        if(!empty($start_date) && !empty($end_date)){
+            return redirect('/project_heads/view_bmr_status_filter_view/'.$start_date . '/'.$end_date);
+        }
+        if(isset($request->fliterFrom)) dd($request);
+        return view('project_heads.view_bmr_status');
+    }
+
+    public function bmr_status_view_filter_view($start_date, $end_date = null){
+        $success_query = Successful_record::where('created_at', '>=', $start_date)->where('created_at', '<=', $end_date)->get();
+        $error_query = Error_record::where('created_at', '>=', $start_date)->where('created_at', '<=', $end_date)->get();
+        $results = [
+            'success_count' => count($success_query),
+            'error_count' => count($error_query),
+            'success_report_url' => env('APP_URL') . '/project_heads/view_bmr_status_success_report/'.$start_date . '/'.$end_date,
+            'error_report_url' => env('APP_URL') . '/project_heads/view_bmr_status_error_report/'.$start_date . '/'.$end_date,
+            'from_date' => $start_date,
+            'to_date' => $end_date
+        ];
+        //dd($results);
+        return view('project_heads.view_bmr_status', ['data' => $results]);
+    }
+
+    
+
+    public function view_bmr_status_success_report($start_date, $end_date = null){
+        $success_query = DB::table('successful_records')
+            ->join('meter_mains', 'successful_records.account_id', '=', 'meter_mains.account_id')
+            ->join('consumer_details', 'successful_records.account_id', '=', 'consumer_details.account_id')
+            ->where('successful_records.created_at', '>=', $start_date)
+            ->where('successful_records.created_at', '<=', $end_date)
+            ->whereNotNull('meter_mains.serial_no_new')
+            ->whereNotNull('serial_no_old')
+            ->select(\DB::raw('successful_records.created_at as successful_records_report_created_at, successful_records.updated_at as successful_records_report_updated_at'), 'meter_mains.*', 'consumer_details.*');
+        try{
+            $results = $success_query->get();
+            //dd($results);
+        }
+        catch(\Exception $e){
+            dd($e);
+        }
+
+        $data = [
+            'results' => $results,
+            'dateFrom' => $start_date,
+            'dateTo' => $end_date,
+        ];
+
+        return view('project_heads.view_bmr_status_success_report', ['data' => $data]);
+    }
+
+    public function view_bmr_status_error_report($start_date, $end_date = null){
+        $error_query = DB::table('error_records')
+            ->join('meter_mains', 'error_records.account_id', '=', 'meter_mains.account_id')
+            ->join('consumer_details', 'error_records.account_id', '=', 'consumer_details.account_id')
+            ->where('error_records.created_at', '>=', $start_date)
+            ->where('error_records.created_at', '<=', $end_date)
+            ->whereNotNull('meter_mains.serial_no_new')
+            ->whereNotNull('serial_no_old')
+            ->select(\DB::raw('error_records.error_reason, error_records.updated_by_aao as error_updated_by_aao, error_records.created_at as error_report_created_at, error_records.updated_at as error_report_updated_at'), 'meter_mains.*', 'consumer_details.*');
+        try{
+            $results = $error_query->get();
+            //dd($results);
+        }
+        catch(\Exception $e){
+            dd($e);
+        }
+
+        $data = [
+            'results' => $results,
+            'dateFrom' => $start_date,
+            'dateTo' => $end_date,
+        ];
+
+        return view('project_heads.view_bmr_status_error_report', ['data' => $data]);
+    }
+    
+    public function view_bmr_status_success_report_ae($start_date, $end_date = null, $division = null, $subdivision = null,$section = null){
+        $success_query = DB::table('successful_records')
+            ->join('meter_mains', 'successful_records.account_id', '=', 'meter_mains.account_id')
+            ->join('consumer_details', 'successful_records.account_id', '=', 'consumer_details.account_id')
+            ->where('successful_records.created_at', '>=', $start_date)
+            ->where('successful_records.created_at', '<=', $end_date)
+            ->whereNotNull('meter_mains.serial_no_new')
+            ->whereNotNull('serial_no_old')
+            ->select(\DB::raw('successful_records.created_at as successful_records_report_created_at, successful_records.updated_at as successful_records_report_updated_at'), 'meter_mains.*', 'consumer_details.*');
+            if ($division != null) {
+                $success_query->where('consumer_details.division', '=', $division);
+            }
+        
+            if ($subdivision != null) {
+                $success_query->where('consumer_details.sd_pincode', '=', $subdivision);
+            }
+            if ($section != null) {
+                $success_query->where('consumer_details.section', '=', $section);
+            }
+        
+          
+         
+        
+        try{
+            $success_query_results = $success_query->get();
+            //dd($results);
+        }
+        catch(\Exception $e){
+            dd($e);
+        }
+
+        $data = [
+            'results' => $success_query_results,
+            'dateFrom' => $start_date,
+            'dateTo' => $end_date,
+        ];
+
+        return view('project_heads.view_bmr_status_success_report', ['data' => $data]);
+    }
+
+    public function view_bmr_status_error_report_ae($start_date, $end_date = null, $division = null, $subdivision = null,$section = null){
+        $error_query = DB::table('error_records')
+            ->join('meter_mains', 'error_records.account_id', '=', 'meter_mains.account_id')
+            ->join('consumer_details', 'error_records.account_id', '=', 'consumer_details.account_id')
+            ->where('error_records.created_at', '>=', $start_date)
+            ->where('error_records.created_at', '<=', $end_date)
+            ->whereNotNull('meter_mains.serial_no_new')
+            ->whereNotNull('serial_no_old')
+            ->select(\DB::raw('error_records.error_reason, error_records.updated_by_aao as error_updated_by_aao, error_records.created_at as error_report_created_at, error_records.updated_at as error_report_updated_at'), 'meter_mains.*', 'consumer_details.*');
+            if ($division != null) {
+                $error_query->where('consumer_details.division', '=', $division);
+            }
+        
+            if ($subdivision != null) {
+                $error_query->where('consumer_details.sd_pincode', '=', $subdivision);
+            }
+            if ($section != null) {
+                $error_query->where('consumer_details.section', '=', $section);
+            }
+        
+       try{
+            $error_query_results = $error_query->get();
+            //dd($results);
+        }
+        catch(\Exception $e){
+            dd($e);
+        }
+
+        $data = [
+            'results' => $error_query_results,
+            'dateFrom' => $start_date,
+            'dateTo' => $end_date,
+        ];
+
+        return view('project_heads.view_bmr_status_error_report', ['data' => $data]);
+    }
+}

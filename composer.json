@@ -1,0 +1,7 @@
+{
+    "require": {
+        "stevebauman/location": "^7.4",
+        "laravel/sanctum": "^4.0",
+        "league/fractal": "^0.20.1"
+    }
+}
